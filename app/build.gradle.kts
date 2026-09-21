@@ -98,8 +98,8 @@ android {
         applicationId = "za.org.rtc.community"
         minSdk = 26
         targetSdk = 36
-        versionCode = 31
-        versionName = "1.0.6-beta.1"
+        versionCode = 32
+        versionName = "1.0.6-beta.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
         // Deliberately fail closed outside the explicitly configured build type.
