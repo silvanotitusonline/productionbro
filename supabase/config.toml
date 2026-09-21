@@ -1,0 +1,37 @@
+project_id = "eqwstpdjoineycrkhpht"
+
+# RTC uses immediate email/password access and authenticated guest sessions. These are the
+# canonical local-development defaults; the matching Hosted Auth provider settings must be saved
+# separately for the non-production and production projects.
+[auth]
+enable_signup = true
+enable_anonymous_sign_ins = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+
+[functions.rtc-privacy-requests]
+verify_jwt = true
+
+[functions.rtc-fcm-dispatch]
+verify_jwt = true
+
+[functions.dispatch-community-alerts]
+verify_jwt = true
+
+[functions.community-media-url]
+verify_jwt = true
+
+[functions.report-community-post]
+verify_jwt = true
+
+[functions.rtc-admin-ai]
+verify_jwt = true
+
+
+[functions.service-centre-notify]
+verify_jwt = true
+
+[functions.civic-report-media-url]
+verify_jwt = true
