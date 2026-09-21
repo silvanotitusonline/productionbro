@@ -1646,25 +1646,36 @@ class RtcRepository @Inject constructor(
         _posts.value = listOf(newPost) + _posts.value.filterNot { it.id == newPost.id }
         discardDraft(DraftArea.COMMUNITY)
 
-        // The outer runCatching only guards against createCommunityPost throwing. That call
-        // already returns Result<String> internally, so a normal (non-throwing) inner failure
-        // was previously reported as an outer success and this function unconditionally
-        // returned Result.success(postId) regardless of what happened remotely. Flatten the
-        // two Result layers so a genuine remote failure clears no pending state and is
-        // surfaced to the caller, which already has correct onSuccess/onFailure UI handling.
+        // The remote call itself returns Result<String>. Flatten the outer boundary so a
+        // non-throwing remote failure cannot be misreported as a successful local post.
         val remoteResult: Result<String> = runCatching { productionUxRepository.createCommunityPost(text, mediaUris, clientPostId) }
             .fold(onSuccess = { it }, onFailure = { Result.failure(it) })
-        if (remoteResult.isSuccess) {
-            database.cachedPostDao().updatePendingSync(postId, false)
-            _posts.value = _posts.value.map { if (it.id == postId) it.copy(isPendingSync = false) else it }
-        }
-        refreshLiveContent()
+
         return remoteResult.fold(
-            onSuccess = { Result.success(postId) },
-            // Local optimistic entry stays cached with isPendingSync = true so it is not lost;
-            // the caller surfaces this failure to the user rather than silently queuing it.
-            onFailure = { Result.failure(it) },
+            onSuccess = { serverPostId ->
+                // Never keep the temporary ID alongside the authoritative server object.
+                // A direct detail query makes the confirmed object the single local projection;
+                // the visible Community ViewModel refreshes its Room-backed feed after success.
+                removeOptimisticCommunityPost(postId)
+                productionUxRepository.communityPost(serverPostId).getOrNull()?.let { confirmedPost ->
+                    database.cachedPostDao().insertPost(confirmedPost.toCachedEntity())
+                    _posts.value = listOf(confirmedPost) + _posts.value.filterNot { it.id == confirmedPost.id }
+                }
+                Result.success(serverPostId)
+            },
+            onFailure = { failure ->
+                // A failed or timed-out request must not leave a local-only Community post that
+                // cannot be deleted remotely. Restore text as a draft so the resident can retry.
+                removeOptimisticCommunityPost(postId)
+                saveDraft(DraftArea.COMMUNITY, body = cleanText)
+                Result.failure(failure)
+            },
         )
+    }
+
+    private suspend fun removeOptimisticCommunityPost(postId: String) {
+        database.cachedPostDao().deletePost(postId)
+        _posts.value = _posts.value.filterNot { it.id == postId }
     }
 
     suspend fun submitSupportRequest(title: String, detail: String): Result<String> {
