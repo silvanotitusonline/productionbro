@@ -280,17 +280,29 @@ class SupabaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun deletePost(postId: String): Result<Unit> = NetworkResilience.standardResult {
-        supabase.postgrest.rpc(
-            function = "delete_community_post",
-            parameters = buildJsonObject { put("p_post_id", postId) },
-        )
-        // The RPC is the source of truth. Remove all local projections only
-        // after it succeeds so a failed request cannot hide a live post.
-        cachedPostDao.deletePost(postId)
-        cachedCommentDao.deleteCommentsForPost(postId)
-        syncEngine.triggerSystemWideUpdate(
-            za.org.rtc.community.core.sync.SystemUpdateSyncEngine.SystemUpdateEvent.PostDeleted(postId)
-        )
+        val cachedPost = cachedPostDao.getPostById(postId)
+        if (cachedPost?.isPendingSync == true) {
+            // A previous build could retain an optimistic placeholder after a rejected publish.
+            // It has no server ID and must be removable locally rather than sent to the owner-only
+            // deletion RPC, which correctly cannot find it.
+            cachedPostDao.deletePost(postId)
+            cachedCommentDao.deleteCommentsForPost(postId)
+            syncEngine.triggerSystemWideUpdate(
+                za.org.rtc.community.core.sync.SystemUpdateSyncEngine.SystemUpdateEvent.PostDeleted(postId)
+            )
+        } else {
+            supabase.postgrest.rpc(
+                function = "delete_community_post",
+                parameters = buildJsonObject { put("p_post_id", postId) },
+            )
+            // The RPC is the source of truth. Remove all local projections only
+            // after it succeeds so a failed request cannot hide a live post.
+            cachedPostDao.deletePost(postId)
+            cachedCommentDao.deleteCommentsForPost(postId)
+            syncEngine.triggerSystemWideUpdate(
+                za.org.rtc.community.core.sync.SystemUpdateSyncEngine.SystemUpdateEvent.PostDeleted(postId)
+            )
+        }
         Unit
     }
 

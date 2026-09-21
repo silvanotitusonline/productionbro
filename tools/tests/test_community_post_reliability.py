@@ -38,6 +38,19 @@ def test_post_submission_has_client_idempotency_and_terminal_ui_state():
     assert "communityViewModel.refresh()" in feed
 
 
+def test_failed_community_posts_are_rolled_back_and_old_placeholders_are_removable():
+    root_repository = read("app/src/main/java/za/org/rtc/community/data/RtcRepository.kt")
+    community_repository = read("app/src/main/java/za/org/rtc/community/feature/community/SupabaseCommunityRepository.kt")
+
+    assert "private suspend fun removeOptimisticCommunityPost(postId: String)" in root_repository
+    assert "removeOptimisticCommunityPost(postId)" in root_repository
+    assert "saveDraft(DraftArea.COMMUNITY, body = cleanText)" in root_repository
+    assert "listOf(confirmedPost) + _posts.value.filterNot" in root_repository
+    assert "cachedPost?.isPendingSync == true" in community_repository
+    assert "A previous build could retain an optimistic placeholder" in community_repository
+    assert 'function = "delete_community_post"' in community_repository
+
+
 def test_media_and_sync_feedback_are_bounded_and_stable():
     media = read("app/src/main/java/za/org/rtc/community/feature/community/CommunityMedia.kt")
     banner = read("app/src/main/java/za/org/rtc/community/ui/components/LiveSyncStatusBanner.kt")
